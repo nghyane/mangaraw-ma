@@ -5,6 +5,24 @@ import fs from 'fs';
 import getZToken from './zToken.js';
 
 const BASE_URL = 'https://mangaraw.ma';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Safari/537.36';
+const AD_BLOCK_LIST = [
+    'adservice.google.com',
+    'ad.doubleclick.net',
+    'pagead2.googlesyndication.com',
+    'googleads.g.doubleclick.net',
+    'tpc.googlesyndication.com',
+    'googleadservices.com',
+    'fonts.gstatic.com',
+    'www.google-analytics.com',
+    'www.googletagmanager.com',
+    'www.googletagservices.com',
+    'lib.cdnlibjs.com',
+    'chaseherbalpasty.com',
+    'bullionglidingscuttle.com',
+    'sahpupxhyk.com',
+    'isolatedovercomepasted.com'
+];
 
 const getMangaList = async (page = 1) => {
     const response = await fetch(`https://mangaraw.ma/page/${page}`)
@@ -86,14 +104,18 @@ const getChapterImages = async (url) => {
     const zToken = await getZToken();
     url = url + `?t=${zToken}`;
 
-    const browser = getInitializedBrowser();
-    const page = await browser.newPage();
-    await page.setRequestInterception(true);
+    console.log(url + '\n');
 
-    // ./lazyLoad.txt
+    const browser = await getInitializedBrowser();
+    const page = await browser.newPage();
+
+    await page.setRequestInterception(true);
+    await page.setUserAgent(USER_AGENT);
+
     const newLazyText = await fs.promises.readFile(
         new URL('./lazyLoad.txt', import.meta.url)
     );
+    
     page.on('request', (request) => {
         if (request.url().includes('lazyload.min.js')) {
             request.respond({
@@ -115,7 +137,6 @@ const getChapterImages = async (url) => {
             return;
         };
 
-        // https://mangaraw.ma/api/v1/m/c -> {"s":true}
         if (request.url().includes('mangaraw.ma/api/v1/m/c')) {
             request.respond({
                 status: 200,
@@ -126,33 +147,75 @@ const getChapterImages = async (url) => {
             return;
         }
 
+        if (AD_BLOCK_LIST.some((ad) => request.url().includes(ad))) {
+            request.abort();
+            return;
+        }
+
+        if (request.resourceType() === 'stylesheet' || request.resourceType() === 'font') {
+            request.abort();
+            return;
+        }
+
+        const files = [
+            'bg.jpg',
+            'logo.png',
+            'favicon.ico',
+            'owl.carousel.min.js',
+            'bootstrap.min.js',
+            'jquery-ui.min.js',
+            'script.js'
+        ];
+
+        if (files.some((file) => request.url().includes(file))) {
+            request.abort();
+            return;
+        }
 
         request.continue();
-
     });
 
 
 
     await page.goto(url, {
-        waitUntil: 'domcontentloaded',
+        waitUntil: 'load',
     });
 
-    const elements = await page.$$(".chapter_boxImages .imageChap");
+    const elements = await page.$$("#chapter_boxImages .imageChap");
+    const images = [];
 
     for (let i = 0; i < elements.length; i++) {
         const element = elements[i];
-        await element.scrollIntoView();
 
+        await element.waitForSelector("canvas", {
+            visible: true,
+            timeout: 1000,
+        });
+
+        const canvas = await element.$('canvas');
+
+        const image = await page.evaluate((canvas) => {
+            return canvas.toDataURL();
+        }, canvas);
+
+
+        const buffer = Buffer.from(image.replace(/^data:image\/\w+;base64,/, ""), 'base64');
+
+        const imagePath = `./images/${i}.png`;
+        await fs.promises.writeFile(imagePath, buffer).catch((error) => {
+            throw new Error(error);
+        });
+
+        images.push({
+            index: i,
+            imagePath: imagePath,
+        });
     }
 
 
-
-    await page.screenshot({ path: 'example.png', fullPage: true });
     await page.close();
 
-    process.exit();
-
-    return;
+    return images;
 }
 
 export { getMangaList, getManga, getChapterImages };

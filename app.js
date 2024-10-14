@@ -1,9 +1,10 @@
 import { initializeBrowser, closeBrowser } from './utils/puppeteerClient.js';
-
 import mangaQueue from './queues/mangaQueue.js';
+import chapterQueue from './queues/chapterQueue.js';
 
 await initializeBrowser();
 
+chapterQueue.empty();
 mangaQueue.empty();
 
 const modules = [
