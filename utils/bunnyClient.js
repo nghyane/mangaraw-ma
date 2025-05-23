@@ -13,7 +13,21 @@ const BUNNY_STORAGE_URL = 'https://storage.bunnycdn.com';
  * @returns {Promise}
  */
 const uploadImage = async (filePath, saveToFile) => {
-    const stream = fs.createReadStream(filePath);
+
+    let stream = null;
+
+    if (!filePath.startsWith('http')) {
+        filePath = fs.realpathSync(filePath);
+        stream = fs.createReadStream(filePath);
+    } else {
+        const response = await fetch(filePath).then((response) => {
+            return response.arrayBuffer();
+        }).catch((error) => {
+            throw new Error(error);
+        });
+
+        stream = Buffer.from(response);
+    }
 
     const response = await fetch(`${BUNNY_STORAGE_URL}/${STORAGE_ZONE_NAME}/${saveToFile}`, {
         method: 'PUT',
@@ -24,8 +38,6 @@ const uploadImage = async (filePath, saveToFile) => {
         body: stream,
     }).then((response) => {
         return response.json();
-    }).catch((error) => {
-        throw new Error(error);
     });
 
     return response;

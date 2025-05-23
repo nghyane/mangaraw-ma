@@ -16,6 +16,10 @@ const files = [
     'images/9.png',
     'images/10.png',
     'images/11.png',
+    'images/12.png',
+    'images/13.png',
+    'images/14.png',
+    'images/15.png',
 ];
 
 const promises = files.map((file, i) => {

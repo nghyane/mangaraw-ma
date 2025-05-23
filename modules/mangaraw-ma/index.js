@@ -1,11 +1,11 @@
 
 import { JSDOM } from 'jsdom';
-import { getInitializedBrowser } from '../../utils/puppeteerClient.js';
+import { getInitializedBrowser, initializeBrowser } from '../../utils/puppeteerClient.js';
 import fs from 'fs';
 import getZToken from './zToken.js';
 
 const BASE_URL = 'https://mangaraw.ma';
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Safari/537.36';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0';
 const AD_BLOCK_LIST = [
     'adservice.google.com',
     'ad.doubleclick.net',
@@ -85,26 +85,52 @@ const getManga = async (url) => {
     });
 
     const genres = [];
-    document.querySelectorAll('.detail_story .detail_infomation .detail_listInfo .item .info_value > a').forEach((element) => {
-        if (element.textContent === 'Updating') return;
+    const info = {};
 
-        genres.push(element.textContent.trim());
+    document.querySelectorAll('.detail_story .detail_infomation .detail_listInfo .item').forEach((element) => {
+        const label = element.querySelector('.info_label').textContent.trim();
+
+        if (label === 'Status') {
+            info.status = element.querySelector('.info_value').textContent.trim() == 'On Going' ? 'ongoing' : 'completed';
+        }
+
+        if (label === 'Author') {
+            info.author = element.querySelector('.info_value').textContent.trim();
+        }
+
+        if (label === 'Artist') {
+            info.artist = element.querySelector('.info_value').textContent.trim();
+        }
+
+        if (label === 'Categories') {
+            element.querySelectorAll('.info_value > a').forEach((genre) => {
+                genres.push(genre.textContent.trim());
+            });
+        }
+
+        if (label === 'Other name') {
+            info.alternative_title = element.querySelector('.info_value').textContent.trim();
+        }
     });
 
     return {
         title: title,
-        content: content,
-        image: image,
+        description: content,
+        cover_image: image,
         genres: genres,
         chapters,
+        status: info.status || 'ongoing',
+        author_name: !info.author == 'Updating' ? info.author : null,
+        artist_name: !info.artist == 'Updating' ? info.artist : null,
+        alternative_title: !info.alternative_title == 'Updating'  || !info.alternative_title == '' ? info.alternative_title : null,
     };
 }
 
-const getChapterImages = async (url) => {
+const getChapterImages = async (url, savePath) => {
+    await initializeBrowser();
+
     const zToken = await getZToken();
     url = url + `?t=${zToken}`;
-
-    console.log(url + '\n');
 
     const browser = await getInitializedBrowser();
     const page = await browser.newPage();
@@ -115,7 +141,7 @@ const getChapterImages = async (url) => {
     const newLazyText = await fs.promises.readFile(
         new URL('./lazyLoad.txt', import.meta.url)
     );
-    
+
     page.on('request', (request) => {
         if (request.url().includes('lazyload.min.js')) {
             request.respond({
@@ -184,15 +210,23 @@ const getChapterImages = async (url) => {
     const elements = await page.$$("#chapter_boxImages .imageChap");
     const images = [];
 
+    let errors = 0;
+
     for (let i = 0; i < elements.length; i++) {
         const element = elements[i];
 
         await element.waitForSelector("canvas", {
             visible: true,
-            timeout: 1000,
+            timeout: 5000,
+        }).catch((error) => {
+            errors++;
         });
 
         const canvas = await element.$('canvas');
+
+        if (!canvas) {
+            continue;
+        }
 
         const image = await page.evaluate((canvas) => {
             return canvas.toDataURL();
@@ -201,7 +235,11 @@ const getChapterImages = async (url) => {
 
         const buffer = Buffer.from(image.replace(/^data:image\/\w+;base64,/, ""), 'base64');
 
-        const imagePath = `./images/${i}.png`;
+        if (!fs.existsSync(savePath)) {
+            fs.mkdirSync(savePath, { recursive: true });
+        }
+
+        const imagePath = `${savePath}/${i}.png`;
         await fs.promises.writeFile(imagePath, buffer).catch((error) => {
             throw new Error(error);
         });
@@ -212,6 +250,9 @@ const getChapterImages = async (url) => {
         });
     }
 
+    if (errors > 3) {
+        throw new Error('Too many errors on images', url);
+    }
 
     await page.close();
 

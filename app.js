@@ -2,31 +2,65 @@ import { initializeBrowser, closeBrowser } from './utils/puppeteerClient.js';
 import mangaQueue from './queues/mangaQueue.js';
 import chapterQueue from './queues/chapterQueue.js';
 
-await initializeBrowser();
+import cron from 'node-cron';
 
-chapterQueue.empty();
-mangaQueue.empty();
+await  mangaQueue.obliterate({ force: true });
+await chapterQueue.obliterate({ force: true });
+
+await initializeBrowser();
 
 const modules = [
     'mangaraw-ma',
 ];
 
-modules.forEach(async (modulePath) => {
-    const module = await import(`./modules/${modulePath}/index.js`);
-    const mangaList = await module.getMangaList();
 
-    for (const manga of mangaList) {
-        mangaQueue.add({
-            url: manga.url,
-            title: manga.title,
-            module: modulePath,
-        });
+cron.schedule('*/5 * * * *', async () => {
+    console.log('Running cron');
 
-        break;
+    for (const modulePath of modules) {
+        const module = await import(`./modules/${modulePath}/index.js`);
+        const mangaList = await module.getMangaList(1);
+
+        console.log(`Page 1 - ${mangaList.length} mangas`);
+
+        for (const manga of mangaList) {
+            mangaQueue.add({
+                url: manga.url,
+                title: manga.title,
+                module: modulePath,
+            });
+        }
     }
 });
 
+for (const modulePath of modules) {
+    const module = await import(`./modules/${modulePath}/index.js`);
+    for (let i = 1; i <= 3; i++) {
+        const mangaList = await module.getMangaList(i);
 
-process.on('SIGINT', async () => {
-    await closeBrowser();
-});
+        console.log(`Page ${i} - ${mangaList.length} mangas`);
+
+        for (const manga of mangaList) {
+            mangaQueue.add({
+                url: manga.url,
+                title: manga.title,
+                module: modulePath,
+            });
+        }
+    }
+}
+
+
+
+process.on( 
+    'SIGTERM',
+    async () => {
+        await chapterQueue.empty();
+        await mangaQueue.empty();
+
+        await closeBrowser();
+
+        await chapterQueue.close();
+        await mangaQueue.close();
+    },
+);
