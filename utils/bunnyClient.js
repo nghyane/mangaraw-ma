@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'node:fs';
 import fetch from 'node-fetch';
 
 const ACCESS_KEY = '67d20cc3-25b7-41c8-a4afc3b62eb1-bed1-42f4';
@@ -17,8 +17,8 @@ const uploadImage = async (filePath, saveToFile) => {
     let stream = null;
 
     if (!filePath.startsWith('http')) {
-        filePath = fs.realpathSync(filePath);
-        stream = fs.createReadStream(filePath);
+        const resolvedPath = fs.realpathSync(filePath);
+        stream = fs.createReadStream(resolvedPath);
     } else {
         const response = await fetch(filePath).then((response) => {
             return response.arrayBuffer();
