@@ -7,13 +7,13 @@ import { uploadImage } from "../utils/bunnyClient.js";
 
 const mangaQueue = new Queue('manga', queueOptions);
 
-mangaQueue.process(async (job, done) => {
+mangaQueue.process(async (job) => {
     const lockKey = `manga:${Buffer.from(job.data.url).toString('base64')}`;
     if (await redisClient.exists(lockKey)) {
-        return done();
+        return;
     }
 
-    await redisClient.set(lockKey, '1', 'EX', 500); 
+    await redisClient.set(lockKey, '1', 'EX', 500);
 
     const module = await import(`../modules/${job.data.module}/index.js`);
     const manga = await module.getManga(job.data.url).catch((error) => {
@@ -23,7 +23,7 @@ mangaQueue.process(async (job, done) => {
     });
 
     if (!manga) {
-        return done();
+        return;
     }
 
     let existManga = null;
@@ -57,7 +57,7 @@ mangaQueue.process(async (job, done) => {
                     throw new Error('Upload cover failed');
                 }
 
-                return `https://storage.mangaraw.plus/${imagePath}`;
+                return `https://storage1.mangabuzz.org/${imagePath}`;
             })
             .catch((error) => {
                 console.error(
@@ -66,7 +66,7 @@ mangaQueue.process(async (job, done) => {
             });
 
         if (!cover_image) {
-            return done();
+            return;
         }
 
         manga.cover_image = cover_image;
@@ -97,7 +97,7 @@ mangaQueue.process(async (job, done) => {
     }
 
     if (response.skip) {
-        return done();
+        return;
     }
 
     if (existManga?.id) {
@@ -123,7 +123,6 @@ mangaQueue.process(async (job, done) => {
         }
     }
 
-    return done();
 });
 
 export default mangaQueue;

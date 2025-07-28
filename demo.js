@@ -1,6 +1,6 @@
 import { uploadImage, deleteFile } from "./utils/bunnyClient.js";
 import pLimit from "p-limit";
-import fs from "fs";
+import fs from "node:fs";
 
 
 const limit = pLimit(5);

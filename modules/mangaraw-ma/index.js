@@ -190,7 +190,8 @@ const getChapterImages = async (url, savePath) => {
             'owl.carousel.min.js',
             'bootstrap.min.js',
             'jquery-ui.min.js',
-            'script.js'
+            'script.js',
+            'data:image'
         ];
 
         if (files.some((file) => request.url().includes(file))) {

@@ -8,6 +8,7 @@
 		"node-cron": "^3.0.3",
 		"node-fetch": "^3.3.2",
 		"p-limit": "^6.1.0",
+		"playwright": "^1.53.0",
 		"puppeteer": "^23.5.3"
 	}
 }

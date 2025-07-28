@@ -1,17 +1,16 @@
 import pLimit from "p-limit";
 import Queue from 'bull';
-import fs from "fs";
+import fs from "node:fs";
 import queueOptions from '../config/queueOptions.js';
-import redisClient from '../utils/redisClient.js';
 import { uploadImage, deleteFile } from "../utils/bunnyClient.js";
 import { API_PUSH_CHAPTER } from '../config/apiCrawler.js';
 
 
 const chapterQueue = new Queue('chapter', queueOptions);
 
-chapterQueue.process(async (job, done) => {
+chapterQueue.process(async (job) => {
     const limit = pLimit(15);
-    console.log(`${job.data.manga.title} - ${job.data.chapter.title}`); 
+    console.log(`${job.data.manga.title} - ${job.data.chapter.title}`);
 
     const module = await import(`../modules/${job.data.module}/index.js`);
     const images = await module.getChapterImages(job.data.chapter.url, `./images/${job.data.manga.id}/${job.data.chapter.index}`).catch((error) => {
@@ -21,7 +20,7 @@ chapterQueue.process(async (job, done) => {
     });
 
     if (!images || images.length === 0) {
-        return done();
+        return;
     }
 
     const promises = images.map((image) => {
@@ -29,7 +28,7 @@ chapterQueue.process(async (job, done) => {
             const upload = await uploadImage(image.imagePath, `${job.data.manga.id}/${job.data.chapter.index}/${image.index}.png`);
 
             if (upload.HttpCode >= 300) {
-                throw new Error('Upload image failed');
+                throw new Error('Upload image failed', upload);
             }
 
             return `/${job.data.manga.id}/${job.data.chapter.index}/${image.index}.png`;
@@ -43,7 +42,7 @@ chapterQueue.process(async (job, done) => {
 
         console.error(error);
 
-        return done();
+        return;
     }
 
     
@@ -59,7 +58,7 @@ chapterQueue.process(async (job, done) => {
             image_urls: images.map((_image, index) => {
                 return {
                     index,
-                    url: `https://storage.mangaraw.plus/${job.data.manga.id}/${job.data.chapter.index}/${index}.png`,
+                    url: `https://storage1.mangabuzz.org/${job.data.manga.id}/${job.data.chapter.index}/${index}.png`,
                 };
             }),
             source_link: job.data.chapter.url,
@@ -91,8 +90,6 @@ chapterQueue.process(async (job, done) => {
             );
         }
     });
-
-    return done();
 });
 
 
